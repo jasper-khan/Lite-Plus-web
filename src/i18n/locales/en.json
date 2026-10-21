@@ -600,6 +600,7 @@
     "login_password": "Signed in with a password",
     "logout": "Signed out",
     "mcp_approve": "Approved MCP authorization {{id}}",
+    "mcp_approve_long": "Approved long-term MCP authorization {{id}}, valid until revoked, recorded expiry {{expires_at}}",
     "mcp_deny": "Denied MCP authorization {{id}}",
     "mcp_terminal_close": "Disconnected the MCP terminal for {{name}} after {{duration}}",
     "mcp_terminal_open": "Opened an MCP terminal for {{name}}",

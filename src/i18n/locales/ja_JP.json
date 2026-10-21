@@ -600,6 +600,7 @@
     "login_password": "パスワードでログインしました",
     "logout": "ログアウトしました",
     "mcp_approve": "MCP 認可 {{id}} を承認しました",
+    "mcp_approve_long": "長期 MCP 認可 {{id}} を承認しました。取り消すまで有効で、記録上の期限は {{expires_at}} です",
     "mcp_deny": "MCP 認可 {{id}} を拒否しました",
     "mcp_terminal_close": "サーバー「{{name}}」の MCP ターミナルを切断しました（{{duration}}）",
     "mcp_terminal_open": "サーバー「{{name}}」の MCP ターミナルを開始しました",

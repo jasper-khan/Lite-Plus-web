@@ -1,7 +1,7 @@
 import { quotePowerShellArg, quoteShellArg, quoteShellArgs } from "./shellQuote.ts";
 
 export const LITE_AGENT_GITHUB_REPO = "nuomiiiii/Lite-agent";
-export const LITE_AGENT_DOCKER_IMAGE = "ghcr.io/nuomiiiii/Lite-agent:latest";
+export const LITE_AGENT_DOCKER_IMAGE = "ghcr.io/nuomiiiii/lite-agent:latest";
 export const LITE_AGENT_INSTALL_USER_AGENT =
   "Lite-agent-install (+https://github.com/nuomiiiii/Lite-agent)";
 
