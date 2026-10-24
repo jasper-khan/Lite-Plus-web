@@ -1,5 +1,13 @@
 export const remoteAgentWaitTimeoutMs = 30_000;
 
+export function setRemoteTerminalInputEnabled(
+  terminal: { options: { disableStdin?: boolean } } | null | undefined,
+  enabled: boolean,
+) {
+  if (!terminal) return;
+  terminal.options.disableStdin = !enabled;
+}
+
 const remoteErrorKeys: Record<string, string> = {
   "Remote control is disabled on this agent": "terminal.session.errors.agent_disabled",
   "Remote session authorization failed": "terminal.session.errors.authorization_failed",

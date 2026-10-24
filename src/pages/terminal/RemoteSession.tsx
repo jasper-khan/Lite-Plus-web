@@ -46,6 +46,7 @@ import {
   createRemoteSessionLease,
   localizeRemoteError,
   remoteAgentWaitTimeoutMs,
+  setRemoteTerminalInputEnabled,
 } from "@/utils/remoteSession";
 import { TerminalContext } from "@/contexts/TerminalContext";
 import {
@@ -318,6 +319,7 @@ export default function RemoteSession({ tabId, node, live, online, active, compa
       : configuredPadding;
     const options: Partial<ITerminalOptions> = {
       allowProposedApi: true,
+      disableStdin: true,
       cursorBlink: resolved.terminalOptions.cursorBlink,
       convertEol: resolved.terminalOptions.convertEol,
       fontFamily: resolved.terminalOptions.fontFamily,
@@ -634,6 +636,7 @@ export default function RemoteSession({ tabId, node, live, online, active, compa
               setConnectionState("connected");
               remoteReadyRef.current = true;
               setRemoteReady(true);
+              setRemoteTerminalInputEnabled(terminal.current, true);
               fileManager.current?.initialize(message.roots || [], message.home || message.roots?.[0], message.separator || "/", message.file_transfer || 1);
               resizeTerminal();
               if (activeRef.current && !isEditableElement(document.activeElement)) {
@@ -645,6 +648,7 @@ export default function RemoteSession({ tabId, node, live, online, active, compa
               clearAgentWaitTimeout();
               remoteReadyRef.current = false;
               setRemoteReady(false);
+              setRemoteTerminalInputEnabled(terminal.current, false);
               setConnectionState("error");
               const localizedMessage = localizeRemoteError(message.message, t);
               setConnectionError(localizedMessage);
@@ -661,6 +665,7 @@ export default function RemoteSession({ tabId, node, live, online, active, compa
           if (disposed) return;
           clearAgentWaitTimeout();
           sessionLease?.release();
+          setRemoteTerminalInputEnabled(terminal.current, false);
           setConnectionState("error");
           setConnectionError(t("terminal.session.connection_error"));
         };
@@ -668,6 +673,7 @@ export default function RemoteSession({ tabId, node, live, online, active, compa
           clearHeartbeat();
           clearAgentWaitTimeout();
           sessionLease?.release();
+          setRemoteTerminalInputEnabled(terminal.current, false);
           if (!disposed) {
             remoteReadyRef.current = false;
             setRemoteReady(false);
@@ -746,6 +752,7 @@ export default function RemoteSession({ tabId, node, live, online, active, compa
   );
   const reconnect = () => {
     terminal.current?.reset();
+    setRemoteTerminalInputEnabled(terminal.current, false);
     setReconnectKey((value) => value + 1);
   };
   const flag = node.region_override?.trim() || node.region?.trim() || "UN";
