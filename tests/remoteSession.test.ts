@@ -10,6 +10,7 @@ import {
   loadStoredRemoteGrant,
   localizeRemoteError,
   saveStoredRemoteGrant,
+  setRemoteTerminalInputEnabled,
 } from "../src/utils/remoteSession.ts";
 
 const terminalSource = readFileSync("src/pages/terminal/RemoteSession.tsx", "utf8");
@@ -217,6 +218,18 @@ test("desktop remote sessions keep the file sidebar closed until opened", () => 
 test("remote session no longer treats the Lite host as a protected node", () => {
   assert.doesNotMatch(terminalSource, /remote_control_protected/);
   assert.doesNotMatch(terminalSource, /local_address_blocked/);
+});
+
+test("remote terminal stdin is disabled until the session is ready and after it drops", () => {
+  const terminal = { options: { disableStdin: false } };
+  setRemoteTerminalInputEnabled(terminal, false);
+  assert.equal(terminal.options.disableStdin, true);
+  setRemoteTerminalInputEnabled(terminal, true);
+  assert.equal(terminal.options.disableStdin, false);
+  setRemoteTerminalInputEnabled(null, true);
+  assert.match(terminalSource, /disableStdin: true/);
+  assert.match(terminalSource, /setRemoteTerminalInputEnabled\(terminal\.current, true\)/);
+  assert.match(terminalSource, /setRemoteTerminalInputEnabled\(terminal\.current, false\)/);
 });
 
 test("remote sessions create terminals through a page-bound rotating grant", () => {
