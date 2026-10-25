@@ -40,3 +40,19 @@ test("parses vmess and shadowsocks links", () => {
   assert.equal(ss?.ss_method, "aes-128-gcm");
   assert.equal(ss?.password, "secret");
 });
+
+test("parses HTTP proxy share links", () => {
+  const http = parseShareLink("http://alice:secret@proxy.example.com:8080#sms");
+  assert.equal(http?.protocol, "http");
+  assert.equal(http?.address, "proxy.example.com");
+  assert.equal(http?.dest_port, "8080");
+  assert.equal(http?.username, "alice");
+  assert.equal(http?.password, "secret");
+  assert.equal(http?.security, "none");
+  assert.equal(http?.name, "sms");
+
+  const https = parseShareLink("https://alice:secret@proxy.example.com:8443#tls-http");
+  assert.equal(https?.protocol, "http");
+  assert.equal(https?.security, "tls");
+  assert.equal(https?.dest_port, "8443");
+});

@@ -8,7 +8,7 @@ export function parsePreviewLinks(body: string): string[] {
     } catch { return []; }
   }
   return text.split(/\r?\n/).map((line) => line.trim())
-    .filter((line) => /^(?:ss|ssr|vmess|vless|trojan|hysteria2?|hy2|tuic|anytls|wireguard|mieru|mierus):\/\//i.test(line));
+    .filter((line) => /^(?:ss|ssr|vmess|vless|trojan|hysteria2?|hy2|tuic|anytls|https?|socks5?|wireguard|mieru|mierus):\/\//i.test(line));
 }
 
 export function subscriptionTargetURL(base: string, target: string): string {

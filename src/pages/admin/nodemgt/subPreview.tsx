@@ -51,6 +51,7 @@ function protoLabel(protocol: string) {
   if (value === "shadowsocks" || value === "ss") return "SS";
   if (value === "vless") return "Vless";
   if (value === "vmess") return "Vmess";
+  if (value === "http" || value === "https") return "HTTP";
   if (value === "anytls") return "AnyTLS";
   if (!value) return "";
   return value.charAt(0).toUpperCase() + value.slice(1);

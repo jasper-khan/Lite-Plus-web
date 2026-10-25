@@ -11,6 +11,7 @@ export type NodemgtSnapshot = {
   users: any[];
   plans: any[];
   certs: any[];
+  root_certs: any[];
   subs: any[];
   outbounds: any[];
   routes: any[];
@@ -33,6 +34,7 @@ const NODEMGT_REQUESTS: NodemgtRequest[] = [
   { key: "users", method: "admin:nodemgt.user.list" },
   { key: "plans", method: "admin:nodemgt.plan.list" },
   { key: "certs", method: "admin:nodemgt.cert.list" },
+  { key: "root_certs", method: "admin:nodemgt.root_cert.list" },
   { key: "subs", method: "admin:nodemgt.subscription.list" },
   { key: "outbounds", method: "admin:nodemgt.outbound.list" },
   { key: "routes", method: "admin:nodemgt.route.list" },
@@ -62,6 +64,7 @@ export function emptyNodemgtSnapshot(): NodemgtSnapshot {
     users: [],
     plans: [],
     certs: [],
+    root_certs: [],
     subs: [],
     outbounds: [],
     routes: [],
@@ -99,7 +102,7 @@ export function nodemgtPrimaryMethods(tab: string): string[] {
     case "plans":
       return ["admin:nodemgt.plan.list", "admin:nodemgt.user.list"];
     case "certs":
-      return ["admin:nodemgt.cert.list", "admin:nodemgt.settings.get"];
+      return ["admin:nodemgt.cert.list", "admin:nodemgt.root_cert.list", "admin:nodemgt.settings.get"];
     case "subscriptions":
     case "templates":
       return [

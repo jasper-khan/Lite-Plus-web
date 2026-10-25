@@ -80,7 +80,10 @@ function parseURI(raw: string): ShareLinkFields | null {
   const user = decodeURIComponent(url.username || "");
   const pass = decodeURIComponent(url.password || "");
   const transport = transportOf(pick(q, "type", "net", "network") || "tcp");
-  const security = securityOf(pick(q, "security", "tls") || (mapped === "trojan" || mapped === "anytls" ? "tls" : "none"));
+  const security = securityOf(
+    pick(q, "security", "tls") ||
+      (mapped === "trojan" || mapped === "anytls" || protocol === "https" ? "tls" : "none"),
+  );
   const fields: ShareLinkFields = {
     protocol: mapped,
     name: decodeURIComponent(url.hash.replace(/^#/, "")),

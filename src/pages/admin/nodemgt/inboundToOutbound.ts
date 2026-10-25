@@ -11,11 +11,21 @@ export function wildcardHost(host: string) {
   );
 }
 
+function usableCertHost(domain?: string, shareDomain?: string) {
+  const share = String(shareDomain || "").trim();
+  if (share && !share.startsWith("*.")) return share;
+  const value = String(domain || "").trim();
+  if (value.startsWith("*.")) return value.slice(2);
+  return value;
+}
+
 function issuedCertDomain(
   inbound: any,
-  cert?: { domain?: string; status?: string } | null,
+  cert?: { domain?: string; share_domain?: string; status?: string } | null,
 ) {
-  const domain = String(inbound?.cert_domain || cert?.domain || "").trim();
+  const custom = String(inbound?.tls_domain || "").trim();
+  if (custom) return custom;
+  const domain = usableCertHost(inbound?.cert_domain || cert?.domain, inbound?.share_domain || cert?.share_domain);
   if (!domain) return "";
   const status = String(inbound?.cert_status || cert?.status || "issued").trim().toLowerCase();
   if (status && status !== "issued") return "";
@@ -31,7 +41,7 @@ function nodeIPForStack(stack: string | undefined, ipv4: string, ipv6: string) {
 export function inboundShareHost(
   inbound: any,
   node?: { ipv4?: string; ipv6?: string } | null,
-  cert?: { domain?: string; status?: string } | null,
+  cert?: { domain?: string; share_domain?: string; status?: string } | null,
 ) {
   const strategy = String(inbound?.share_strategy || "node").toLowerCase();
   const listen = String(inbound?.listen || "").trim();
@@ -61,7 +71,7 @@ export function inboundSharePort(inbound: any) {
 export function outboundFieldsFromInbound(
   inbound: any,
   node?: { ipv4?: string; ipv6?: string } | null,
-  cert?: { domain?: string; status?: string } | null,
+  cert?: { domain?: string; share_domain?: string; status?: string } | null,
 ) {
   const protocol = String(inbound?.protocol || "vless");
   const security = String(inbound?.security || "none");
@@ -86,7 +96,7 @@ export function outboundFieldsFromInbound(
     ws_path: ws ? String(inbound?.ws_path || "/") : "",
     ws_host: ws ? String(inbound?.ws_host || "") : "",
     grpc_service: transport === "grpc" ? String(inbound?.grpc_service || "gun") : "",
-    ss_method: String(inbound?.ss_method || "aes-128-gcm"),
+    ss_method: String(inbound?.ss_method || "2022-blake3-aes-128-gcm"),
     reality_public_key: String(inbound?.reality_public_key || ""),
     reality_short_id: String(inbound?.reality_short_id || ""),
     spider_x: String(inbound?.spider_x || "/"),
@@ -148,6 +158,11 @@ const NODEMGT_RPC_ERROR_RULES: Array<[RegExp, string]> = [
   [/outbound_tag_duplicate|(?:conflict:.*)?outbound tag\b/i, "nodemgt.outbound_tag_duplicate"],
   [/built-in https certificate required/i, "nodemgt.sub_reuse_https_missing"],
   [/subscription certificate/i, "nodemgt.sub_tls_paths_required"],
+  [/root certificate is not issued/i, "nodemgt.no_root_certs"],
+  [/root certificate required/i, "nodemgt.root_cert_required"],
+  [/cloudflare api token missing/i, "nodemgt.cf_token_required"],
+  [/acme email required/i, "nodemgt.acme_email_required"],
+  [/subdomain required/i, "nodemgt.cert_share_domain_required"],
   [/certificate required/i, "nodemgt.no_certs"],
   [/name and node required/i, "nodemgt.name_node_required"],
   [/domain and node required/i, "nodemgt.domain_node_required"],

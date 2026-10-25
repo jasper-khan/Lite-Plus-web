@@ -123,7 +123,7 @@ const PATH_TAB: Record<string, TabKey> = Object.fromEntries(
   ),
 );
 
-const PROTOCOLS = ["vless", "vmess", "trojan", "shadowsocks", "hysteria2", "tuic", "anytls"] as const;
+const PROTOCOLS = ["vless", "vmess", "trojan", "shadowsocks", "http", "hysteria2", "tuic", "anytls"] as const;
 const STACKS = ["ipv4", "ipv6", "dual"] as const;
 const FLOWS = ["", "xtls-rprx-vision", "xtls-rprx-vision-udp443"] as const;
 const CORES = ["xray", "sing-box"] as const;
@@ -138,12 +138,13 @@ const REALITY_DESTS = [
   "addons.mozilla.org:443",
 ] as const;
 const SS_METHODS = [
+  "2022-blake3-aes-128-gcm",
+  "2022-blake3-aes-256-gcm",
   "aes-128-gcm",
   "aes-256-gcm",
   "chacha20-ietf-poly1305",
-  "2022-blake3-aes-128-gcm",
-  "2022-blake3-aes-256-gcm",
 ] as const;
+const DEFAULT_SS_METHOD = "2022-blake3-aes-128-gcm";
 const OUTBOUND_PROTOCOLS = ["vless", "vmess", "trojan", "shadowsocks", "anytls", "socks", "http", "freedom", "blackhole"] as const;
 const DOMAIN_STRATEGIES = ["AsIs", "UseIP", "UseIPv4", "UseIPv6"] as const;
 const ROUTE_NETWORKS = ["", "tcp", "udp", "tcp,udp"] as const;
@@ -155,7 +156,7 @@ const OUTBOUND_TRANSPORTS = ["tcp", "ws", "grpc", "httpupgrade", "xhttp"] as con
 
 function transportsFor(protocol: string) {
   if (protocol === "hysteria2" || protocol === "tuic") return ["quic"];
-  if (protocol === "shadowsocks" || protocol === "anytls") return ["tcp"];
+  if (protocol === "shadowsocks" || protocol === "anytls" || protocol === "http") return ["tcp"];
   return ["tcp", "ws", "grpc", "httpupgrade", "xhttp"];
 }
 
@@ -163,6 +164,7 @@ function securitiesFor(protocol: string, transport: string) {
   if (protocol === "anytls") return ["tls", "reality"];
   if (protocol === "hysteria2" || protocol === "tuic" || protocol === "trojan") return ["tls"];
   if (protocol === "shadowsocks") return ["none"];
+  if (protocol === "http") return ["none", "tls"];
   if (transport === "tcp") return ["none", "tls", "reality"];
   return ["none", "tls"];
 }
@@ -414,6 +416,7 @@ function inboundForm(row?: any): FormMap {
     security,
     flow: str(row?.flow, existing ? "" : defaultInboundFlow(protocol, transport, security, core)),
     sni: str(row?.sni),
+    tls_domain: str(row?.tls_domain),
     alpn: str(row?.alpn),
     cert_id: str(row?.cert_id),
     reality_dest: str(row?.reality_dest, security === "reality" ? "www.microsoft.com:443" : ""),
@@ -433,7 +436,7 @@ function inboundForm(row?: any): FormMap {
     http_mode: str(row?.http_mode, "auto"),
     tcp_header: str(row?.tcp_header, "none"),
     tcp_host: str(row?.tcp_host),
-    ss_method: str(row?.ss_method, "aes-128-gcm"),
+    ss_method: str(row?.ss_method, DEFAULT_SS_METHOD),
     sort_index: str(row?.sort_index, "0"),
     share_strategy: inboundShareStrategy(row),
     exclude_from_sub: "false",
@@ -530,6 +533,23 @@ function isFileCert(row?: any) {
   return str(row?.source) === "file" || Boolean(str(row?.cert_path));
 }
 
+function certShareHost(row?: any) {
+  const share = str(row?.share_domain);
+  if (share && !share.startsWith("*.")) return share;
+  const domain = str(row?.domain);
+  if (domain.startsWith("*.")) return domain.slice(2);
+  return domain;
+}
+
+function certOptionLabel(row: any) {
+  const domain = str(row?.domain) || row?.id;
+  const share = str(row?.share_domain);
+  const cover = row?.cover_wildcard === true || row?.cover_wildcard === "true";
+  if (share && share !== domain) return `${domain} · ${share}`;
+  if (cover && domain && !domain.startsWith("*.")) return `${domain} / *.${domain}`;
+  return domain;
+}
+
 function formatCertIssuer(raw: string) {
   const value = str(raw).trim();
   if (!value || value === "file") return "";
@@ -537,9 +557,9 @@ function formatCertIssuer(raw: string) {
   return value;
 }
 
-function displayCertIssuer(row: any, fileLabel: string, acmeLabel: string) {
+function displayCertIssuer(row: any, fileLabel: string, acmeLabel: string, rootLabel?: string) {
   const issuer = formatCertIssuer(str(row?.issuer));
-  const source = isFileCert(row) ? fileLabel : acmeLabel;
+  const source = isFileCert(row) ? fileLabel : str(row?.source) === "root" || str(row?.root_cert_id) ? rootLabel || acmeLabel : acmeLabel;
   return issuer ? `${source} · ${issuer}` : source;
 }
 
@@ -562,11 +582,19 @@ function CellClamp({ value, maxWidth = 280 }: { value: string; maxWidth?: number
 }
 
 function certForm(row?: any): FormMap {
+  const source = isFileCert(row)
+    ? "file"
+    : str(row?.source) === "root" || str(row?.root_cert_id)
+      ? "root"
+      : "acme";
   return {
     id: str(row?.id),
     domain: str(row?.domain),
+    root_cert_id: str(row?.root_cert_id),
+    share_domain: str(row?.share_domain),
+    cover_wildcard: row?.cover_wildcard === false || row?.cover_wildcard === "false" ? "false" : "true",
     node_uuid: str(row?.node_uuid),
-    source: isFileCert(row) ? "file" : "acme",
+    source,
     cert_path: str(row?.cert_path),
     key_path: str(row?.key_path),
     test_ca: "false",
@@ -608,7 +636,7 @@ function outboundForm(row?: any): FormMap {
     ws_path: str(row?.ws_path, "/"),
     ws_host: str(row?.ws_host),
     grpc_service: str(row?.grpc_service, "gun"),
-    ss_method: str(row?.ss_method, "aes-128-gcm"),
+    ss_method: str(row?.ss_method, DEFAULT_SS_METHOD),
     via_outbound: str(row?.via_outbound),
     reality_public_key: str(row?.reality_public_key),
     reality_short_id: str(row?.reality_short_id),
@@ -651,6 +679,7 @@ function inboundUpsertBody(form: FormMap) {
     security: form.security,
     flow: form.flow,
     sni: form.sni,
+    tls_domain: form.tls_domain,
     alpn: form.alpn,
     cert_id: form.cert_id,
     reality_dest: form.reality_dest,
@@ -1838,6 +1867,8 @@ export default function PlusAdminPage() {
   const [users, setUsers] = useState<any[]>(() => cached?.users ?? []);
   const [plans, setPlans] = useState<any[]>(() => cached?.plans ?? []);
   const [certs, setCerts] = useState<any[]>(() => cached?.certs ?? []);
+  const [rootCerts, setRootCerts] = useState<any[]>(() => cached?.root_certs ?? []);
+  const [rootDomain, setRootDomain] = useState("");
   const [subs, setSubs] = useState<any[]>(() => cached?.subs ?? []);
   const [outbounds, setOutbounds] = useState<any[]>(() => cached?.outbounds ?? []);
   const [routes, setRoutes] = useState<any[]>(() => cached?.routes ?? []);
@@ -1883,6 +1914,7 @@ export default function PlusAdminPage() {
     setUsers(snap.users);
     setPlans(snap.plans);
     setCerts(snap.certs);
+    setRootCerts(snap.root_certs || []);
     setSubs(snap.subs);
     setOutbounds(snap.outbounds);
     setRoutes(snap.routes);
@@ -1991,21 +2023,28 @@ export default function PlusAdminPage() {
     return status === "saved" || status === "sent";
   });
   const certBusy = certs.some((row) => row.status === "pending");
+  const rootBusy = rootCerts.some((row) => row.status === "pending");
   useEffect(() => {
-    if (!deliveryBusy && !certBusy) return;
+    if (!deliveryBusy && !certBusy && !rootBusy) return;
     const timer = window.setInterval(() => {
       void Promise.all([
         call("admin:nodemgt.control.status", {}),
         certBusy ? call("admin:nodemgt.cert.list", {}) : Promise.resolve(null),
+        rootBusy ? call("admin:nodemgt.root_cert.list", {}) : Promise.resolve(null),
       ])
-        .then(([rows, certRows]) => {
+        .then(([rows, certRows, rootRows]) => {
           setDelivery(asList(rows));
           if (certRows) setCerts(asList(certRows));
+          if (rootRows) {
+            const next = asList(rootRows);
+            setRootCerts(next);
+            patchNodemgtSnapshot({ root_certs: next });
+          }
         })
         .catch(() => undefined);
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [call, deliveryBusy, certBusy]);
+  }, [call, deliveryBusy, certBusy, rootBusy]);
 
   const toastAfterSync = (nodeUUID: string | undefined, rows: any[]) => {
     if (!nodeUUID) {
@@ -2118,6 +2157,7 @@ export default function PlusAdminPage() {
   const viaOutboundOptions = outbounds
     .filter((row) => (!sheetNode || row.node_uuid === sheetNode) && row.name && row.name !== sheet?.form.name)
     .map((row) => ({ value: row.name, label: row.name }));
+  const issuedRoots = rootCerts.filter((row) => row.status === "issued" || row.id === sheet?.form.root_cert_id);
   const issuedCerts = certs.filter(
     (row) =>
       (!sheetNode || row.node_uuid === sheetNode) &&
@@ -2125,13 +2165,15 @@ export default function PlusAdminPage() {
   );
   const certOptions = [
     { value: "", label: t("nodemgt.cert_none") },
-    ...issuedCerts.map((row) => ({ value: row.id, label: row.domain })),
+    ...issuedCerts.map((row) => ({ value: row.id, label: certOptionLabel(row) })),
   ];
   const bindCertPatch = (certId: string, current: FormMap = sheet?.form || {}): FormMap => {
     const cert = certs.find((row) => row.id === certId);
+    const tlsDomain = str(current.tls_domain) || str(cert?.share_domain);
     return {
       cert_id: certId,
-      sni: str(cert?.domain, current.sni),
+      tls_domain: tlsDomain,
+      sni: str(current.sni) || tlsDomain || certShareHost(cert) || current.sni,
     };
   };
   const firstIssuedCert = (nodeUUID: string) =>
@@ -2161,7 +2203,7 @@ export default function PlusAdminPage() {
       ws_path: parsed.ws_path || "/",
       ws_host: parsed.ws_host || "",
       grpc_service: parsed.grpc_service || "gun",
-      ss_method: parsed.ss_method || "aes-128-gcm",
+      ss_method: parsed.ss_method || DEFAULT_SS_METHOD,
       reality_public_key: parsed.reality_public_key || "",
       reality_short_id: parsed.reality_short_id || "",
       spider_x: parsed.spider_x || "/",
@@ -2187,11 +2229,16 @@ export default function PlusAdminPage() {
     const nodeCert = certs.find((row) => row.node_uuid === inbound.node_uuid && str(row.domain) && str(row.status) === "issued");
     const fields = outboundFieldsFromInbound(inbound, node, boundCert || nodeCert);
     const uuid = uuidForInbound(inbound, users) || sheet?.form.uuid || "";
+    const granted = (users || []).find(
+      (user) => user && user.status !== "disabled" && uuidForInbound(inbound, [user]) === uuid,
+    );
+    const httpUser = String(granted?.username || uuid || sheet?.form.username || "");
     setForm({
       ...fields,
       source_inbound_id: inboundId,
       name: outboundTagFromInbound(inbound, sheet?.form.name),
       uuid,
+      username: fields.protocol === "http" || fields.protocol === "socks" ? httpUser : sheet?.form.username || "",
       password: uuid || sheet?.form.password || "",
       flow: fields.flow || sheet?.form.flow || "",
     });
@@ -2368,14 +2415,29 @@ export default function PlusAdminPage() {
           device_limit: Number(form.device_limit || 0),
         });
       } else if (sheet.kind === "cert") {
+        const source = form.source === "file" ? "file" : form.source === "root" ? "root" : "acme";
+        if (source === "root" && !form.root_cert_id) {
+          setError(t("nodemgt.root_cert_required"));
+          return;
+        }
+        if (source === "root" && !form.share_domain.trim()) {
+          setError(t("nodemgt.cert_share_domain_required"));
+          return;
+        }
+        if (source !== "root" && (!form.domain.trim() || !form.node_uuid)) {
+          setError(t("nodemgt.domain_node_required"));
+          return;
+        }
         saved = await call("admin:nodemgt.cert.request", {
           id: form.id || undefined,
           domain: form.domain,
+          root_cert_id: source === "root" ? form.root_cert_id : "",
+          share_domain: form.share_domain,
+          cover_wildcard: source === "acme" ? false : undefined,
           node_uuid: form.node_uuid,
-          test_ca: form.source === "file" ? false : form.test_ca === "true",
-          source: form.source || "acme",
-          cert_path: form.source === "file" ? form.cert_path : "",
-          key_path: form.source === "file" ? form.key_path : "",
+          source,
+          cert_path: source === "file" ? form.cert_path : "",
+          key_path: source === "file" ? form.key_path : "",
         });
       } else if (sheet.kind === "subscription") {
         saved = await call("admin:nodemgt.subscription.upsert", subscriptionUpsertBody(form));
@@ -2505,16 +2567,75 @@ export default function PlusAdminPage() {
 
   const retryCert = async (row: any, testCA = false) => {
     try {
+      const source = isFileCert(row) ? "file" : str(row?.source) === "root" || str(row?.root_cert_id) ? "root" : "acme";
       await call("admin:nodemgt.cert.request", {
         id: row.id,
         domain: row.domain,
+        root_cert_id: row.root_cert_id,
+        share_domain: row.share_domain,
         node_uuid: row.node_uuid,
-        test_ca: isFileCert(row) ? false : testCA,
-        source: isFileCert(row) ? "file" : "acme",
-        cert_path: isFileCert(row) ? str(row.cert_path) : "",
-        key_path: isFileCert(row) ? str(row.key_path) : "",
+        test_ca: source === "acme" ? testCA : false,
+        source,
+        cert_path: source === "file" ? str(row.cert_path) : "",
+        key_path: source === "file" ? str(row.key_path) : "",
       });
       toastAfterSync(row.node_uuid, await loadAfterChange());
+    } catch (err) {
+      toast.error(nodemgtErrorMessage(err, t));
+    }
+  };
+
+  const issueRootCert = async () => {
+    const domain = rootDomain.trim();
+    if (!domain) {
+      toast.error(t("nodemgt.root_domain_required"));
+      return;
+    }
+    if (!settings.cf_api_token_set && !issuer.cf_api_token.trim()) {
+      toast.error(t("nodemgt.cf_token_required"));
+      return;
+    }
+    if (!str(issuer.acme_email) && !str(settings.acme_email)) {
+      toast.error(t("nodemgt.acme_email_required"));
+      return;
+    }
+    try {
+      const saved = await call("admin:nodemgt.root_cert.issue", { domain });
+      const row = saved && typeof saved === "object" ? saved : null;
+      if (row) {
+        setRootCerts((current) => {
+          const next = mergeById(current, row);
+          patchNodemgtSnapshot({ root_certs: next });
+          return next;
+        });
+      }
+      setRootDomain("");
+      toast.success(t("nodemgt.root_cert_issuing"));
+      await loadAfterChange();
+    } catch (err) {
+      toast.error(nodemgtErrorMessage(err, t));
+    }
+  };
+
+  const retryRootCert = async (row: any) => {
+    try {
+      await call("admin:nodemgt.root_cert.issue", { id: row.id, domain: row.domain });
+      toast.success(t("nodemgt.root_cert_issuing"));
+      await loadAfterChange();
+    } catch (err) {
+      toast.error(nodemgtErrorMessage(err, t));
+    }
+  };
+
+  const removeRootCert = async (id: string) => {
+    try {
+      await call("admin:nodemgt.root_cert.delete", { id });
+      setRootCerts((current) => {
+        const next = current.filter((row) => str(row?.id) !== id);
+        patchNodemgtSnapshot({ root_certs: next });
+        return next;
+      });
+      toast.success(t("nodemgt.saved"));
     } catch (err) {
       toast.error(nodemgtErrorMessage(err, t));
     }
@@ -2725,6 +2846,7 @@ export default function PlusAdminPage() {
             </SubPageTabs.List>
           </AdminSheetTabs>
           {certPage === "issuer" ? (
+          <>
           <Paper
             variant="outlined"
             className="admin-tab-panel"
@@ -2773,6 +2895,79 @@ export default function PlusAdminPage() {
               </Stack>
             </Stack>
           </Paper>
+          <Paper
+            variant="outlined"
+            className="admin-tab-panel"
+            sx={{ ...panelSx, mt: 2, p: { xs: 1.5, sm: 2 } }}
+          >
+            <Stack spacing={2}>
+              <Typography sx={{ fontWeight: 600 }}>{t("nodemgt.root_cert_title")}</Typography>
+              <Typography color="text.secondary" sx={{ fontSize: 13, lineHeight: 1.6 }}>
+                {t("nodemgt.root_cert_help")}
+              </Typography>
+              <Stack spacing={0.5}>
+                <Stack
+                  direction={{ xs: "column", sm: "row" }}
+                  spacing={1.5}
+                  useFlexGap
+                  sx={{ alignItems: { xs: "stretch", sm: "flex-start" } }}
+                >
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Field
+                      label={t("nodemgt.root_domain")}
+                      value={rootDomain}
+                      onChange={setRootDomain}
+                      placeholder="abc.com"
+                    />
+                  </Box>
+                  <Button
+                    variant="contained"
+                    onClick={() => void issueRootCert()}
+                    sx={{
+                      height: SHEET_FIELD_HEIGHT,
+                      minHeight: SHEET_FIELD_HEIGHT,
+                      px: 2,
+                      flexShrink: 0,
+                      whiteSpace: "nowrap",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    {t("nodemgt.root_cert_issue")}
+                  </Button>
+                </Stack>
+                <Typography color="text.secondary" sx={{ fontSize: 12, lineHeight: 1.6, px: "14px" }}>
+                  {t("nodemgt.root_domain_help")}
+                </Typography>
+              </Stack>
+              <RecordTable
+                empty={t("nodemgt.empty")}
+                loading={loading}
+                rows={rootCerts}
+                columns={[
+                  { key: "domain", label: t("nodemgt.col_domain"), render: (row) => `${row.domain} / *.${row.domain}` },
+                  { key: "status", label: t("nodemgt.col_status"), render: (row) => <StatusChip value={row.status} /> },
+                  { key: "issuer", label: t("nodemgt.col_issuer"), render: (row) => formatCertIssuer(str(row.issuer)) || t("nodemgt.cert_source_acme") },
+                  { key: "expires", label: t("nodemgt.col_expires"), render: (row) => formatWhen(row.not_after) },
+                  { key: "error", label: t("nodemgt.col_last_error"), render: (row) => <CellClamp value={nodemgtErrorMessage(row.last_error, t) || "—"} maxWidth={280} /> },
+                  {
+                    key: "actions",
+                    label: t("nodemgt.col_actions"),
+                    render: (row) => (
+                      <RowActions>
+                        {row.status === "issued" ? (
+                          <Button size="small" onClick={() => void retryRootCert(row)}>{t("nodemgt.cert_renew_tls")}</Button>
+                        ) : (
+                          <Button size="small" onClick={() => void retryRootCert(row)}>{t("nodemgt.cert_retry")}</Button>
+                        )}
+                        <DeleteButton onClick={() => void removeRootCert(row.id)} />
+                      </RowActions>
+                    ),
+                  },
+                ]}
+              />
+            </Stack>
+          </Paper>
+          </>
           ) : null}
         </SubPageTabs.Root>
       ) : null}
@@ -3016,7 +3211,7 @@ export default function PlusAdminPage() {
               loading={loading}
               rows={listPager.pageItems}
               columns={[
-                { key: "domain", label: t("nodemgt.col_domain") },
+                { key: "domain", label: t("nodemgt.col_domain"), render: (row) => certOptionLabel(row) },
                 { key: "node", label: t("nodemgt.col_node"), render: (row) => nodeName(row.node_uuid) },
                 { key: "status", label: t("nodemgt.col_status"), render: (row) => <StatusChip value={isFileCert(row) && row.status === "pending" ? "file_pending" : row.status} /> },
                 {
@@ -3036,7 +3231,7 @@ export default function PlusAdminPage() {
                 {
                   key: "issuer",
                   label: t("nodemgt.col_issuer"),
-                  render: (row) => displayCertIssuer(row, t("nodemgt.cert_source_file"), t("nodemgt.cert_source_acme")),
+                  render: (row) => displayCertIssuer(row, t("nodemgt.cert_source_file"), t("nodemgt.cert_source_acme"), t("nodemgt.cert_source_root")),
                 },
                 { key: "expires", label: t("nodemgt.col_expires"), render: (row) => formatWhen(row.not_after) },
                 { key: "error", label: t("nodemgt.col_last_error"), render: (row) => <CellClamp value={nodemgtErrorMessage(row.last_error, t) || "—"} maxWidth={280} /> },
@@ -3250,6 +3445,8 @@ export default function PlusAdminPage() {
                         flow: defaultInboundFlow(value, transport, security, core),
                         cert_id: security === "tls" ? sheet.form.cert_id : "",
                         reality_dest: security === "reality" ? sheet.form.reality_dest || "www.microsoft.com:443" : "",
+                        tcp_header: value === "shadowsocks" || value === "http" ? "none" : sheet.form.tcp_header,
+                        ss_method: value === "shadowsocks" ? sheet.form.ss_method || DEFAULT_SS_METHOD : sheet.form.ss_method,
                       });
                     }}
                     options={PROTOCOLS.map((value) => ({ value, label: t(`nodemgt.proto_${value}`) }))}
@@ -3343,7 +3540,7 @@ export default function PlusAdminPage() {
                   }}
                   options={transportsFor(sheet.form.protocol).map((value) => ({ value, label: t(`nodemgt.transport_${value}`) }))}
                 />
-            {sheet.form.transport === "tcp" && sheet.form.protocol !== "anytls" ? (
+            {sheet.form.transport === "tcp" && sheet.form.protocol !== "anytls" && sheet.form.protocol !== "http" ? (
               <TwoCol>
                 <SelectField
                   label={t("nodemgt.tcp_header")}
@@ -3435,6 +3632,13 @@ export default function PlusAdminPage() {
                   options={certOptions}
                   helper={issuedCerts.length ? t("nodemgt.cert_bind_help") : t("nodemgt.no_certs")}
                   searchable
+                />
+                <Field
+                  label={t("nodemgt.tls_domain")}
+                  value={sheet.form.tls_domain}
+                  onChange={(value) => setForm({ tls_domain: value, sni: sheet.form.sni || value })}
+                  placeholder="hk.example.com"
+                  helper={t("nodemgt.tls_domain_help")}
                 />
                 <TwoCol>
                   <Field label={t("nodemgt.sni")} value={sheet.form.sni} onChange={(value) => setForm({ sni: value })} />
@@ -3640,21 +3844,8 @@ export default function PlusAdminPage() {
           </SheetPane>
         ) : null}
         {sheet?.kind === "cert" ? (
-          <SheetPane
-            tabbed={sheet.form.source !== "file"}
-            tabs={
-              <SheetTabs
-                value={sheetTab}
-                onChange={setSheetTab}
-                items={[
-                  { id: "basic", label: t("nodemgt.sheet_basic") },
-                  { id: "advanced", label: t("nodemgt.sheet_advanced") },
-                ]}
-              />
-            }
-          >
-            {sheetTab === "basic" ? (
-              <>
+          <SheetPane>
+            <>
                 <SelectField
                   label={t("nodemgt.col_node")}
                   value={sheet.form.node_uuid}
@@ -3665,23 +3856,52 @@ export default function PlusAdminPage() {
                 <SelectField
                   label={t("nodemgt.cert_source")}
                   value={sheet.form.source || "acme"}
-                  onChange={(value) => {
-                    setForm({ source: value, test_ca: value === "file" ? "false" : sheet.form.test_ca });
-                    if (value === "file") setSheetTab("basic");
-                  }}
+                  onChange={(value) => setForm({ source: value })}
                   options={[
+                    { value: "root", label: t("nodemgt.cert_source_root") },
                     { value: "acme", label: t("nodemgt.cert_source_acme") },
                     { value: "file", label: t("nodemgt.cert_source_file") },
                   ]}
                   helper={t("nodemgt.cert_source_help")}
                 />
-                <Field
-                  label={t("nodemgt.col_domain")}
-                  value={sheet.form.domain}
-                  onChange={(value) => setForm({ domain: value })}
-                  placeholder="example.com"
-                  helper={sheet.form.source === "file" ? undefined : t("nodemgt.cert_pending_help")}
-                />
+                {sheet.form.source === "root" ? (
+                  <>
+                    <SelectField
+                      label={t("nodemgt.root_cert_bind")}
+                      value={sheet.form.root_cert_id}
+                      onChange={(value) => {
+                        const root = rootCerts.find((row) => row.id === value);
+                        setForm({
+                          root_cert_id: value,
+                          domain: str(root?.domain),
+                          share_domain: sheet.form.share_domain,
+                        });
+                      }}
+                      options={
+                        issuedRoots.length
+                          ? issuedRoots.map((row) => ({ value: row.id, label: `${row.domain} / *.${row.domain}` }))
+                          : [{ value: "", label: t("nodemgt.no_root_certs") }]
+                      }
+                      helper={issuedRoots.length ? t("nodemgt.root_cert_bind_help") : t("nodemgt.no_root_certs")}
+                      searchable
+                    />
+                    <Field
+                      label={t("nodemgt.cert_share_domain")}
+                      value={sheet.form.share_domain}
+                      onChange={(value) => setForm({ share_domain: value })}
+                      placeholder={sheet.form.domain ? `hk.${sheet.form.domain}` : "hk.example.com"}
+                      helper={t("nodemgt.cert_share_domain_help")}
+                    />
+                  </>
+                ) : (
+                  <Field
+                    label={t("nodemgt.col_domain")}
+                    value={sheet.form.domain}
+                    onChange={(value) => setForm({ domain: value })}
+                    placeholder={sheet.form.source === "file" ? "example.com" : "hk.example.com"}
+                    helper={sheet.form.source === "file" ? undefined : t("nodemgt.cert_acme_help")}
+                  />
+                )}
                 {sheet.form.source === "file" ? (
                   <>
                     <Field
@@ -3700,16 +3920,7 @@ export default function PlusAdminPage() {
                     />
                   </>
                 ) : null}
-              </>
-            ) : null}
-            {sheetTab === "advanced" && sheet.form.source !== "file" ? (
-              <SheetSwitch
-                title={t("nodemgt.test_ca")}
-                description={t("nodemgt.test_ca_help")}
-                checked={sheet.form.test_ca === "true"}
-                onChange={(next) => setForm({ test_ca: next ? "true" : "false" })}
-              />
-            ) : null}
+            </>
           </SheetPane>
         ) : null}
         {sheet?.kind === "subscription" ? (

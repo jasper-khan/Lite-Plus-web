@@ -18,6 +18,18 @@ test("uses node IP, listen address, or custom share host", () => {
     inboundShareHost({ share_strategy: "node" }, { ipv4: "203.0.113.9" }, { domain: "vpn.example.com", status: "pending" }),
     "203.0.113.9",
   );
+  assert.equal(
+    inboundShareHost({ share_strategy: "node" }, { ipv4: "203.0.113.9" }, { domain: "abc.com", share_domain: "hk.abc.com", status: "issued" }),
+    "hk.abc.com",
+  );
+  assert.equal(
+    inboundShareHost({ share_strategy: "node", tls_domain: "us.abc.com" }, { ipv4: "203.0.113.9" }, { domain: "abc.com", share_domain: "hk.abc.com", status: "issued" }),
+    "us.abc.com",
+  );
+  assert.equal(
+    inboundShareHost({ share_strategy: "node" }, { ipv4: "203.0.113.9" }, { domain: "*.abc.com", status: "issued" }),
+    "abc.com",
+  );
   const dualNode = { ipv4: "203.0.113.9", ipv6: "2001:db8::1" };
   assert.equal(inboundShareHost({ share_strategy: "node", stack: "ipv6" }, dualNode), "2001:db8::1");
   assert.equal(inboundShareHost({ share_strategy: "node", stack: "dual" }, dualNode), "2001:db8::1");
