@@ -1819,6 +1819,46 @@ html[data-admin-shell-active="true"] .km-admin-node-list .admin-responsive-table
   box-shadow: none;
 }
 
+@media (min-width: 1024px) {
+  [data-admin-shell] .km-admin-node-list .admin-responsive-table-wrap,
+  html[data-admin-shell-active="true"] .km-admin-node-list .admin-responsive-table-wrap {
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+}
+
+[data-admin-shell] .admin-nodemgt-record-table,
+html[data-admin-shell-active="true"] .admin-nodemgt-record-table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 0;
+}
+
+[data-admin-shell] .admin-nodemgt-record-table th,
+[data-admin-shell] .admin-nodemgt-record-table td,
+html[data-admin-shell-active="true"] .admin-nodemgt-record-table th,
+html[data-admin-shell-active="true"] .admin-nodemgt-record-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-admin-shell] .admin-nodemgt-record-table th:not(:last-child),
+[data-admin-shell] .admin-nodemgt-record-table td:not(:last-child),
+html[data-admin-shell-active="true"] .admin-nodemgt-record-table th:not(:last-child),
+html[data-admin-shell-active="true"] .admin-nodemgt-record-table td:not(:last-child) {
+  max-width: 0;
+}
+
+[data-admin-shell] .admin-nodemgt-record-table td:last-child,
+html[data-admin-shell-active="true"] .admin-nodemgt-record-table td:last-child {
+  white-space: nowrap;
+}
+
+[data-admin-shell] .admin-nodemgt-row-actions,
+html[data-admin-shell-active="true"] .admin-nodemgt-row-actions {
+  max-width: 100%;
+}
+
 [data-admin-shell] .km-admin-node-list .km-admin-list-empty,
 html[data-admin-shell-active="true"] .km-admin-node-list .km-admin-list-empty {
   padding: 24px 20px;

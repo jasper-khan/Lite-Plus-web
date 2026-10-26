@@ -71,7 +71,18 @@ function download(content: string, name: string) {
 
 function RowActions({ children }: { children: ReactNode }) {
   return (
-    <Stack direction="row" spacing={0.25} useFlexGap sx={{ alignItems: "center", flexWrap: "wrap" }} onClick={(event) => event.stopPropagation()}>
+    <Stack
+      direction="row"
+      spacing={0.25}
+      useFlexGap
+      sx={{
+        alignItems: "center",
+        flexWrap: { xs: "wrap", md: "nowrap" },
+        flexShrink: 0,
+        whiteSpace: "nowrap",
+      }}
+      onClick={(event) => event.stopPropagation()}
+    >
       {children}
     </Stack>
   );

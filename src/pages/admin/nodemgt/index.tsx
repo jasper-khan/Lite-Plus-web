@@ -80,7 +80,7 @@ import {
   type NodemgtSnapshot,
   type NodemgtTemplateList,
 } from "./prefetch";
-import { visibleChipCount } from "./overflowChips";
+import { visibleChipCountFromRects } from "./overflowChips";
 import { previewCopyText, SubPreviewBody, type SubPreview } from "./subPreview";
 import { parsePreviewLinks, TEMPLATE_CLIENTS, subscriptionTargetURL } from "./subscriptionClients";
 import SubscriptionTemplates from "./subscriptionTemplates";
@@ -396,6 +396,41 @@ function inboundRouteOnly(row?: any): string {
   return row.route_only ? "true" : "false";
 }
 
+function randomProxyToken(len = 8) {
+  const alphabet = "abcdefghijkmnopqrstuvwxyz23456789";
+  const bytes = new Uint8Array(len);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
+}
+
+function newProxyAccount() {
+  return { user: randomProxyToken(8), pass: randomProxyToken(12) };
+}
+
+type ProxyAccountRow = { user: string; pass: string };
+
+function parseProxyAccounts(raw: unknown): ProxyAccountRow[] {
+  let value = raw;
+  if (typeof value === "string" && value.trim()) {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(value)) return [];
+  return value.map((row: any) => ({
+    user: str(row?.user || row?.username),
+    pass: str(row?.pass || row?.password),
+  }));
+}
+
+function accountsFormValue(raw: unknown, protocol?: string) {
+  const rows = parseProxyAccounts(raw).filter((row) => row.user || row.pass);
+  if (protocol === "http" && rows.length === 0) return JSON.stringify([newProxyAccount()]);
+  return JSON.stringify(rows);
+}
+
 function inboundForm(row?: any): FormMap {
   const existing = Boolean(row?.id);
   const protocol = str(row?.protocol, "vless");
@@ -437,6 +472,8 @@ function inboundForm(row?: any): FormMap {
     tcp_header: str(row?.tcp_header, "none"),
     tcp_host: str(row?.tcp_host),
     ss_method: str(row?.ss_method, DEFAULT_SS_METHOD),
+    accounts: accountsFormValue(row?.accounts, protocol),
+    allow_transparent: row?.allow_transparent === true || row?.allow_transparent === "true" ? "true" : "false",
     sort_index: str(row?.sort_index, "0"),
     share_strategy: inboundShareStrategy(row),
     exclude_from_sub: "false",
@@ -533,6 +570,14 @@ function isFileCert(row?: any) {
   return str(row?.source) === "file" || Boolean(str(row?.cert_path));
 }
 
+function isACMECert(row?: any) {
+  return !isFileCert(row) && str(row?.source) !== "root" && !str(row?.root_cert_id);
+}
+
+function certAutoRenewOn(row?: any) {
+  return row?.auto_renew !== false && row?.auto_renew !== 0;
+}
+
 function certShareHost(row?: any) {
   const share = str(row?.share_domain);
   if (share && !share.startsWith("*.")) return share;
@@ -586,7 +631,9 @@ function certForm(row?: any): FormMap {
     ? "file"
     : str(row?.source) === "root" || str(row?.root_cert_id)
       ? "root"
-      : "acme";
+      : str(row?.source) === "acme" || str(row?.id)
+        ? "acme"
+        : "root";
   return {
     id: str(row?.id),
     domain: str(row?.domain),
@@ -700,6 +747,8 @@ function inboundUpsertBody(form: FormMap) {
     tcp_header: form.tcp_header,
     tcp_host: form.tcp_host,
     ss_method: form.ss_method,
+    accounts: parseProxyAccounts(form.accounts),
+    allow_transparent: form.allow_transparent === "true",
     sort_index: Number(form.sort_index || 0),
     share_strategy: form.share_strategy || "node",
     exclude_from_sub: false,
@@ -1399,6 +1448,70 @@ function ThreeCol({ children }: { children: ReactNode }) {
   );
 }
 
+function ProxyAccountsEditor({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const { t } = useTranslation();
+  const rows = parseProxyAccounts(value);
+  const setRows = (next: ProxyAccountRow[]) => onChange(JSON.stringify(next));
+  return (
+    <Stack spacing={1} data-sheet-switch="">
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+        <Typography sx={{ fontSize: 13, fontWeight: 700 }}>{t("nodemgt.http_accounts")}</Typography>
+        <Button
+          size="small"
+          variant="text"
+          startIcon={<Plus size={16} />}
+          onClick={() => setRows([...rows, newProxyAccount()])}
+          sx={{ minHeight: 32, px: 1, fontSize: 13, fontWeight: 600, textTransform: "none" }}
+        >
+          {t("nodemgt.http_account_add")}
+        </Button>
+      </Box>
+      {rows.map((row, index) => (
+        <Box key={`${index}-${row.user}`} sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
+          <Typography color="text.secondary" sx={{ width: 18, flexShrink: 0, fontSize: 13, textAlign: "right" }}>
+            {index + 1}
+          </Typography>
+          <TextField
+            size="small"
+            fullWidth
+            hiddenLabel
+            value={row.user}
+            placeholder={t("nodemgt.col_username")}
+            autoComplete="off"
+            onChange={(event) => setRows(rows.map((item, i) => (i === index ? { ...item, user: event.target.value } : item)))}
+            sx={sheetInputSx}
+          />
+          <TextField
+            size="small"
+            fullWidth
+            hiddenLabel
+            value={row.pass}
+            placeholder={t("nodemgt.col_password")}
+            autoComplete="new-password"
+            onChange={(event) => setRows(rows.map((item, i) => (i === index ? { ...item, pass: event.target.value } : item)))}
+            sx={sheetInputSx}
+          />
+          <IconButton
+            size="small"
+            color="error"
+            aria-label={t("nodemgt.delete")}
+            onClick={() => setRows(rows.filter((_, i) => i !== index))}
+            disabled={rows.length <= 1}
+          >
+            <Trash size={16} />
+          </IconButton>
+        </Box>
+      ))}
+    </Stack>
+  );
+}
+
 function ExtraLinksEditor({
   value,
   onChange,
@@ -1612,7 +1725,29 @@ function SheetPane({
 
 function RowActions({ children }: { children: ReactNode }) {
   return (
-    <Stack direction="row" spacing={0.25} useFlexGap sx={{ alignItems: "center", flexWrap: "wrap" }} onClick={(event) => event.stopPropagation()}>
+    <Stack
+      className="admin-nodemgt-row-actions"
+      direction="row"
+      spacing={0.25}
+      useFlexGap
+      sx={{
+        alignItems: "center",
+        justifyContent: "flex-end",
+        flexWrap: "nowrap",
+        minWidth: 0,
+        whiteSpace: "nowrap",
+        "& .MuiButton-root": {
+          minWidth: 0,
+          px: 0.75,
+          fontSize: 13,
+          lineHeight: 1.25,
+        },
+        "& .MuiIconButton-root": {
+          p: 0.5,
+        },
+      }}
+      onClick={(event) => event.stopPropagation()}
+    >
       {children}
     </Stack>
   );
@@ -1732,7 +1867,7 @@ function InboundOverflow({ names }: { names: string[] }) {
     const plus = measure.querySelector("[data-plus]") as HTMLElement | null;
     const widths = chips.map((el) => el.getBoundingClientRect().width);
     const plusW = plus ? plus.getBoundingClientRect().width : 36;
-    setVisible(visibleChipCount(widths, 4, plusW, host.getBoundingClientRect().width));
+    setVisible(visibleChipCountFromRects(widths, 4, plusW, host.getBoundingClientRect().width));
   }, [names]);
   useLayoutEffect(() => {
     layout();
@@ -1755,7 +1890,7 @@ function InboundOverflow({ names }: { names: string[] }) {
     },
   };
   return (
-    <Box sx={{ position: "relative", width: "100%", minWidth: 0, maxWidth: { xs: "100%", md: 420 } }}>
+    <Box sx={{ position: "relative", width: "100%", minWidth: 0, maxWidth: "100%", overflow: "hidden" }}>
       <Stack
         ref={measureRef}
         direction="row"
@@ -1778,7 +1913,7 @@ function InboundOverflow({ names }: { names: string[] }) {
         spacing={0.5}
         sx={{
           flexWrap: "nowrap",
-          minWidth: { xs: 0, md: 200 },
+          minWidth: 0,
           alignItems: "center",
           width: "100%",
           "& .MuiChip-root": chipSx,
@@ -2232,14 +2367,15 @@ export default function PlusAdminPage() {
     const granted = (users || []).find(
       (user) => user && user.status !== "disabled" && uuidForInbound(inbound, [user]) === uuid,
     );
-    const httpUser = String(granted?.username || uuid || sheet?.form.username || "");
+    const httpAcct = parseProxyAccounts(inbound?.accounts)[0];
+    const httpUser = String(httpAcct?.user || granted?.username || uuid || sheet?.form.username || "");
     setForm({
       ...fields,
       source_inbound_id: inboundId,
       name: outboundTagFromInbound(inbound, sheet?.form.name),
       uuid,
       username: fields.protocol === "http" || fields.protocol === "socks" ? httpUser : sheet?.form.username || "",
-      password: uuid || sheet?.form.password || "",
+      password: httpAcct?.pass || uuid || sheet?.form.password || "",
       flow: fields.flow || sheet?.form.flow || "",
     });
     setImportLink("");
@@ -2617,6 +2753,28 @@ export default function PlusAdminPage() {
     }
   };
 
+  const setCertAutoRenew = async (row: any, next: boolean) => {
+    try {
+      await call("admin:nodemgt.cert.set_auto_renew", { id: row.id, auto_renew: next });
+      commitRows("certs", (rows) => rows.map((item) => (str(item?.id) === str(row.id) ? { ...item, auto_renew: next } : item)));
+    } catch (err) {
+      toast.error(nodemgtErrorMessage(err, t));
+    }
+  };
+
+  const setRootCertAutoRenew = async (row: any, next: boolean) => {
+    try {
+      const saved = await call("admin:nodemgt.root_cert.set_auto_renew", { id: row.id, auto_renew: next });
+      setRootCerts((current) => {
+        const nextRows = current.map((item) => (str(item?.id) === str(row.id) ? { ...item, ...(saved && typeof saved === "object" ? saved : { auto_renew: next }) } : item));
+        patchNodemgtSnapshot({ root_certs: nextRows });
+        return nextRows;
+      });
+    } catch (err) {
+      toast.error(nodemgtErrorMessage(err, t));
+    }
+  };
+
   const retryRootCert = async (row: any) => {
     try {
       await call("admin:nodemgt.root_cert.issue", { id: row.id, domain: row.domain });
@@ -2940,13 +3098,19 @@ export default function PlusAdminPage() {
                 </Typography>
               </Stack>
               <RecordTable
-                empty={t("nodemgt.empty")}
                 loading={loading}
                 rows={rootCerts}
                 columns={[
                   { key: "domain", label: t("nodemgt.col_domain"), render: (row) => `${row.domain} / *.${row.domain}` },
                   { key: "status", label: t("nodemgt.col_status"), render: (row) => <StatusChip value={row.status} /> },
                   { key: "issuer", label: t("nodemgt.col_issuer"), render: (row) => formatCertIssuer(str(row.issuer)) || t("nodemgt.cert_source_acme") },
+                  {
+                    key: "auto_renew",
+                    label: t("nodemgt.col_auto_renew"),
+                    render: (row) => (
+                      <EnableSwitch checked={certAutoRenewOn(row)} onChange={(next) => void setRootCertAutoRenew(row, next)} />
+                    ),
+                  },
                   { key: "expires", label: t("nodemgt.col_expires"), render: (row) => formatWhen(row.not_after) },
                   { key: "error", label: t("nodemgt.col_last_error"), render: (row) => <CellClamp value={nodemgtErrorMessage(row.last_error, t) || "—"} maxWidth={280} /> },
                   {
@@ -3114,11 +3278,12 @@ export default function PlusAdminPage() {
               loading={loading}
               rows={listPager.pageItems}
               columns={[
-                { key: "username", label: t("nodemgt.col_username") },
-                { key: "inbounds", label: t("nodemgt.col_inbounds"), render: (row) => <InboundOverflow names={row.inbound_names || []} /> },
-                { key: "plan", label: t("nodemgt.col_plan"), render: (row) => row.plan_name || "—" },
+                { key: "username", label: t("nodemgt.col_username"), width: "9%" },
+                { key: "inbounds", label: t("nodemgt.col_inbounds"), width: "11%", render: (row) => <InboundOverflow names={row.inbound_names || []} /> },
+                { key: "plan", label: t("nodemgt.col_plan"), width: "6%", render: (row) => row.plan_name || "—" },
                 {
                   key: "presence",
+                  width: "5%",
                   label: t("nodemgt.col_presence"),
                   render: (row) => (
                     <Box
@@ -3133,6 +3298,7 @@ export default function PlusAdminPage() {
                 },
                 {
                   key: "online_ips",
+                  width: "8%",
                   label: t("nodemgt.col_online_ips"),
                   render: (row) => {
                     const ips = liveOnlineIPs(row);
@@ -3147,18 +3313,20 @@ export default function PlusAdminPage() {
                     );
                   },
                 },
-                { key: "status", label: t("nodemgt.col_status"), render: (row) => <StatusChip value={row.status} /> },
-                { key: "delivery", label: t("nodemgt.col_delivery"), render: (row) => <DeliveryChip status={nodeDelivery(row.node_uuid)?.status} error={nodeDelivery(row.node_uuid)?.last_error} /> },
-                { key: "quota", label: t("nodemgt.col_quota_bytes"), render: (row) => formatQuotaLabel(row.used_bytes || 0, row.quota_bytes || 0, "—") },
-                { key: "rate", label: t("nodemgt.col_rate_limit_bps"), render: (row) => formatMbpsLabel(row.rate_limit_bps || 0, t("nodemgt.unlimited")) },
-                { key: "ends", label: t("nodemgt.col_expires"), render: (row) => formatWhen(row.expires_at || row.assignment_ends_at) },
+                { key: "status", label: t("nodemgt.col_status"), width: "5%", render: (row) => <StatusChip value={row.status} /> },
+                { key: "delivery", label: t("nodemgt.col_delivery"), width: "6%", render: (row) => <DeliveryChip status={nodeDelivery(row.node_uuid)?.status} error={nodeDelivery(row.node_uuid)?.last_error} /> },
+                { key: "quota", label: t("nodemgt.col_quota_bytes"), width: "8%", render: (row) => formatQuotaLabel(row.used_bytes || 0, row.quota_bytes || 0, "—") },
+                { key: "rate", label: t("nodemgt.col_rate_limit_bps"), width: "5%", render: (row) => formatMbpsLabel(row.rate_limit_bps || 0, t("nodemgt.unlimited")) },
+                { key: "ends", label: t("nodemgt.col_expires"), width: "9%", render: (row) => formatWhen(row.expires_at || row.assignment_ends_at) },
                 {
                   key: "reset",
+                  width: "6%",
                   label: t("nodemgt.col_traffic_reset_day"),
                   render: (row) => (Number(row.traffic_reset_day) > 0 ? t("nodemgt.reset_day_value", { day: row.traffic_reset_day }) : t("nodemgt.reset_day_off")),
                 },
                 {
                   key: "actions",
+                  width: "22%",
                   label: t("nodemgt.col_actions"),
                   render: (row) => (
                     <RowActions>
@@ -3232,6 +3400,16 @@ export default function PlusAdminPage() {
                   key: "issuer",
                   label: t("nodemgt.col_issuer"),
                   render: (row) => displayCertIssuer(row, t("nodemgt.cert_source_file"), t("nodemgt.cert_source_acme"), t("nodemgt.cert_source_root")),
+                },
+                {
+                  key: "auto_renew",
+                  label: t("nodemgt.col_auto_renew"),
+                  render: (row) =>
+                    isACMECert(row) ? (
+                      <EnableSwitch checked={certAutoRenewOn(row)} onChange={(next) => void setCertAutoRenew(row, next)} />
+                    ) : (
+                      "—"
+                    ),
                 },
                 { key: "expires", label: t("nodemgt.col_expires"), render: (row) => formatWhen(row.not_after) },
                 { key: "error", label: t("nodemgt.col_last_error"), render: (row) => <CellClamp value={nodemgtErrorMessage(row.last_error, t) || "—"} maxWidth={280} /> },
@@ -3447,6 +3625,8 @@ export default function PlusAdminPage() {
                         reality_dest: security === "reality" ? sheet.form.reality_dest || "www.microsoft.com:443" : "",
                         tcp_header: value === "shadowsocks" || value === "http" ? "none" : sheet.form.tcp_header,
                         ss_method: value === "shadowsocks" ? sheet.form.ss_method || DEFAULT_SS_METHOD : sheet.form.ss_method,
+                        accounts: value === "http" ? accountsFormValue(sheet.form.accounts, "http") : sheet.form.accounts,
+                        allow_transparent: value === "http" ? sheet.form.allow_transparent : "false",
                       });
                     }}
                     options={PROTOCOLS.map((value) => ({ value, label: t(`nodemgt.proto_${value}`) }))}
@@ -3473,6 +3653,17 @@ export default function PlusAdminPage() {
                     onChange={(value) => setForm({ ss_method: value })}
                     options={SS_METHODS.map((value) => ({ value, label: value }))}
                   />
+                ) : null}
+                {sheet.form.protocol === "http" ? (
+                  <>
+                    <ProxyAccountsEditor value={sheet.form.accounts} onChange={(value) => setForm({ accounts: value })} />
+                    <SheetSwitch
+                      title={t("nodemgt.allow_transparent")}
+                      description={t("nodemgt.allow_transparent_help")}
+                      checked={sheet.form.allow_transparent === "true"}
+                      onChange={(next) => setForm({ allow_transparent: next ? "true" : "false" })}
+                    />
+                  </>
                 ) : null}
                 <Field label={t("nodemgt.col_listen")} value={sheet.form.listen} onChange={(value) => setForm({ listen: value })} placeholder={t("nodemgt.listen_placeholder")} />
                 <SelectField
@@ -3855,7 +4046,7 @@ export default function PlusAdminPage() {
                 />
                 <SelectField
                   label={t("nodemgt.cert_source")}
-                  value={sheet.form.source || "acme"}
+                  value={sheet.form.source || "root"}
                   onChange={(value) => setForm({ source: value })}
                   options={[
                     { value: "root", label: t("nodemgt.cert_source_root") },
@@ -4336,9 +4527,9 @@ function RecordTable({
   loading,
 }: {
   rows: any[];
-  empty: string;
+  empty?: string;
   loading?: boolean;
-  columns: { key: string; label: string; render?: (row: any) => ReactNode }[];
+  columns: { key: string; label: string; width?: string; render?: (row: any) => ReactNode }[];
 }) {
   if (!rows.length) {
     if (loading) {
@@ -4350,13 +4541,21 @@ function RecordTable({
         </Stack>
       );
     }
+    if (!empty) return null;
     return <Box className="km-admin-list-empty">{empty}</Box>;
   }
   const actionCol = columns.find((column) => column.key === "actions");
   return (
     <>
-      <Box className="admin-responsive-table-wrap overflow-x-auto" sx={{ display: { xs: "none", md: "block" } }}>
-        <Table container={false} className="admin-responsive-table w-full">
+      <Box className="admin-responsive-table-wrap overflow-x-hidden" sx={{ display: { xs: "none", md: "block" } }}>
+        <Table container={false} className="admin-responsive-table admin-nodemgt-record-table w-full">
+          {columns.some((column) => column.width) ? (
+            <colgroup>
+              {columns.map((column) => (
+                <col key={column.key} style={column.width ? { width: column.width } : undefined} />
+              ))}
+            </colgroup>
+          ) : null}
           <TableHeader>
             <TableRow>
               {columns.map((column) => (
@@ -4367,11 +4566,18 @@ function RecordTable({
           <TableBody>
             {rows.map((row, index) => (
               <TableRow key={row.id || index}>
-                {columns.map((column) => (
-                  <TableCell key={column.key} data-label={column.label}>
-                    {column.render ? column.render(row) : str(row[column.key], "—")}
-                  </TableCell>
-                ))}
+                {columns.map((column) => {
+                  const content = column.render ? column.render(row) : str(row[column.key], "—");
+                  return (
+                    <TableCell
+                      key={column.key}
+                      data-label={column.label}
+                      title={typeof content === "string" ? content : undefined}
+                    >
+                      {content}
+                    </TableCell>
+                  );
+                })}
               </TableRow>
             ))}
           </TableBody>

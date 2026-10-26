@@ -20,3 +20,18 @@ export function visibleChipCount(
   }
   return visible;
 }
+
+/** Round fractional DPR measurements so chips never paint past the host. */
+export function visibleChipCountFromRects(
+  chipWidths: number[],
+  gap: number,
+  plusWidth: number,
+  hostWidth: number,
+): number {
+  return visibleChipCount(
+    chipWidths.map((width) => Math.ceil(width)),
+    gap,
+    Math.ceil(plusWidth),
+    Math.max(0, Math.floor(hostWidth)),
+  );
+}
