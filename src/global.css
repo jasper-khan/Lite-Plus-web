@@ -1838,24 +1838,61 @@ html[data-admin-shell-active="true"] .admin-nodemgt-record-table {
 [data-admin-shell] .admin-nodemgt-record-table td,
 html[data-admin-shell-active="true"] .admin-nodemgt-record-table th,
 html[data-admin-shell-active="true"] .admin-nodemgt-record-table td {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+[data-admin-shell] .admin-nodemgt-record-table .admin-table-header th,
+html[data-admin-shell-active="true"] .admin-nodemgt-record-table .admin-table-header th {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+[data-admin-shell] .admin-nodemgt-record-table th:first-child,
+[data-admin-shell] .admin-nodemgt-record-table td:first-child,
+html[data-admin-shell-active="true"] .admin-nodemgt-record-table th:first-child,
+html[data-admin-shell-active="true"] .admin-nodemgt-record-table td:first-child {
+  padding-left: 20px;
+}
+
+[data-admin-shell] .admin-nodemgt-record-table th:last-child,
+[data-admin-shell] .admin-nodemgt-record-table td:last-child,
+html[data-admin-shell-active="true"] .admin-nodemgt-record-table th:last-child,
+html[data-admin-shell-active="true"] .admin-nodemgt-record-table td:last-child {
+  padding-right: 20px;
+}
+
+[data-admin-shell] .admin-nodemgt-record-table .admin-nodemgt-col-fluid,
+html[data-admin-shell-active="true"] .admin-nodemgt-record-table .admin-nodemgt-col-fluid {
+  min-width: 0;
+  max-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-[data-admin-shell] .admin-nodemgt-record-table th:not(:last-child),
-[data-admin-shell] .admin-nodemgt-record-table td:not(:last-child),
-html[data-admin-shell-active="true"] .admin-nodemgt-record-table th:not(:last-child),
-html[data-admin-shell-active="true"] .admin-nodemgt-record-table td:not(:last-child) {
-  max-width: 0;
-}
-
-[data-admin-shell] .admin-nodemgt-record-table td:last-child,
-html[data-admin-shell-active="true"] .admin-nodemgt-record-table td:last-child {
   white-space: nowrap;
+}
+
+[data-admin-shell] .admin-nodemgt-record-table .admin-nodemgt-col-fit,
+html[data-admin-shell-active="true"] .admin-nodemgt-record-table .admin-nodemgt-col-fit {
+  width: 1%;
+  white-space: nowrap;
+}
+
+[data-admin-shell] .admin-nodemgt-record-table thead th,
+html[data-admin-shell-active="true"] .admin-nodemgt-record-table thead th {
+  position: relative;
+}
+
+[data-admin-shell] .admin-nodemgt-record-table.is-column-sized,
+html[data-admin-shell-active="true"] .admin-nodemgt-record-table.is-column-sized {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100%;
 }
 
 [data-admin-shell] .admin-nodemgt-row-actions,
 html[data-admin-shell-active="true"] .admin-nodemgt-row-actions {
+  justify-content: flex-start;
+  width: max-content;
   max-width: 100%;
 }
 
@@ -3126,6 +3163,7 @@ html.remote-terminal-open [data-sonner-toaster][data-y-position="top"] {
 
 .admin-node-col-resize:hover::after,
 .admin-node-table thead th:hover > .admin-node-col-resize::after,
+.admin-nodemgt-record-table thead th:hover > .admin-node-col-resize::after,
 .admin-node-col-resize.is-active::after {
   background: #078dee;
 }

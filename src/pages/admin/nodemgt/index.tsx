@@ -52,11 +52,17 @@ import {
   Shield,
   Calendar,
   Plus,
+  RefreshCw,
   Shuffle,
   Trash,
   Users,
   XCircle,
 } from "@/components/admin/muiIcons";
+import {
+  tableColumnStyle,
+  useResizableTableColumns,
+  type TableColumnWidths,
+} from "@/components/admin/resizableTableColumns";
 import {
   Table,
   TableBody,
@@ -626,6 +632,23 @@ function CellClamp({ value, maxWidth = 280 }: { value: string; maxWidth?: number
   );
 }
 
+function CellEllipsis({ value }: { value: string }) {
+  if (!value || value === "—") return <>{"—"}</>;
+  return (
+    <Box
+      title={value}
+      sx={{
+        minWidth: 0,
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {value}
+    </Box>
+  );
+}
+
 function certForm(row?: any): FormMap {
   const source = isFileCert(row)
     ? "file"
@@ -777,7 +800,7 @@ function outboundUpsertBody(form: FormMap) {
     ws_path: form.ws_path,
     ws_host: form.ws_host,
     grpc_service: form.grpc_service,
-    ss_method: form.ss_method,
+    ss_method: form.protocol === "shadowsocks" ? form.ss_method : undefined,
     via_outbound: form.via_outbound,
     reality_public_key: form.reality_public_key,
     reality_short_id: form.reality_short_id,
@@ -1732,7 +1755,7 @@ function RowActions({ children }: { children: ReactNode }) {
       useFlexGap
       sx={{
         alignItems: "center",
-        justifyContent: "flex-end",
+        justifyContent: "flex-start",
         flexWrap: "nowrap",
         minWidth: 0,
         whiteSpace: "nowrap",
@@ -3098,12 +3121,13 @@ export default function PlusAdminPage() {
                 </Typography>
               </Stack>
               <RecordTable
+                id="root-certs"
                 loading={loading}
                 rows={rootCerts}
                 columns={[
                   { key: "domain", label: t("nodemgt.col_domain"), render: (row) => `${row.domain} / *.${row.domain}` },
                   { key: "status", label: t("nodemgt.col_status"), render: (row) => <StatusChip value={row.status} /> },
-                  { key: "issuer", label: t("nodemgt.col_issuer"), render: (row) => formatCertIssuer(str(row.issuer)) || t("nodemgt.cert_source_acme") },
+                  { key: "issuer", label: t("nodemgt.col_issuer"), width: "16%", render: (row) => formatCertIssuer(str(row.issuer)) || t("nodemgt.cert_source_acme") },
                   {
                     key: "auto_renew",
                     label: t("nodemgt.col_auto_renew"),
@@ -3111,8 +3135,8 @@ export default function PlusAdminPage() {
                       <EnableSwitch checked={certAutoRenewOn(row)} onChange={(next) => void setRootCertAutoRenew(row, next)} />
                     ),
                   },
-                  { key: "expires", label: t("nodemgt.col_expires"), render: (row) => formatWhen(row.not_after) },
-                  { key: "error", label: t("nodemgt.col_last_error"), render: (row) => <CellClamp value={nodemgtErrorMessage(row.last_error, t) || "—"} maxWidth={280} /> },
+                  { key: "expires", label: t("nodemgt.col_expires"), width: "14%", render: (row) => formatWhen(row.not_after) },
+                  { key: "error", label: t("nodemgt.col_last_error"), width: "12%", render: (row) => <CellClamp value={nodemgtErrorMessage(row.last_error, t) || "—"} maxWidth={280} /> },
                   {
                     key: "actions",
                     label: t("nodemgt.col_actions"),
@@ -3186,16 +3210,17 @@ export default function PlusAdminPage() {
 
           {tab === "inbounds" ? (
             <RecordTable
+              id="inbounds"
               empty={t("nodemgt.empty")}
               loading={loading}
               rows={listPager.pageItems}
               columns={[
-                { key: "name", label: t("nodemgt.col_name") },
-                { key: "sort", label: t("nodemgt.col_sub_sort"), render: (row) => (row.sort_index == null || row.sort_index === "" ? "—" : String(row.sort_index)) },
-                { key: "node", label: t("nodemgt.col_node"), render: (row) => nodeName(row.node_uuid) },
-                { key: "core", label: t("nodemgt.col_core"), render: (row) => displayCore(row.core) },
-                { key: "protocol", label: t("nodemgt.col_protocol"), render: (row) => `${t(`nodemgt.proto_${row.protocol}`, { defaultValue: row.protocol })}${row.security && row.security !== "none" ? ` / ${t(`nodemgt.security_${row.security}`, { defaultValue: row.security })}` : ""}` },
-                { key: "listen", label: t("nodemgt.col_listen"), render: (row) => `${row.listen}:${row.port}` },
+                { key: "name", label: t("nodemgt.col_name"), width: "16%", render: (row) => <CellEllipsis value={str(row.name)} /> },
+                { key: "sort", label: t("nodemgt.col_sub_sort"), width: "8%", render: (row) => (row.sort_index == null || row.sort_index === "" ? "—" : String(row.sort_index)) },
+                { key: "node", label: t("nodemgt.col_node"), width: "12%", render: (row) => <CellEllipsis value={nodeName(row.node_uuid)} /> },
+                { key: "core", label: t("nodemgt.col_core"), width: "8%", render: (row) => displayCore(row.core) },
+                { key: "protocol", label: t("nodemgt.col_protocol"), width: "12%", render: (row) => `${t(`nodemgt.proto_${row.protocol}`, { defaultValue: row.protocol })}${row.security && row.security !== "none" ? ` / ${t(`nodemgt.security_${row.security}`, { defaultValue: row.security })}` : ""}` },
+                { key: "listen", label: t("nodemgt.col_listen"), width: "10%", render: (row) => <CellEllipsis value={`${row.listen}:${row.port}`} /> },
                 { key: "delivery", label: t("nodemgt.col_delivery"), render: (row) => <DeliveryChip status={inboundDeliveryOf(row, nodeDelivery(row.node_uuid))} error={inboundTouched(row, nodeDelivery(row.node_uuid)) ? nodeDelivery(row.node_uuid)?.last_error : undefined} /> },
                 { key: "enabled", label: t("nodemgt.col_enabled"), render: (row) => <EnableSwitch checked={row.enabled !== false} onChange={(next) => void toggleRowEnabled("inbound", row, next)} /> },
                 {
@@ -3220,14 +3245,15 @@ export default function PlusAdminPage() {
             />
           ) : tab === "outbounds" ? (
             <RecordTable
+              id="outbounds"
               empty={t("nodemgt.empty")}
               loading={loading}
               rows={listPager.pageItems}
               columns={[
-                { key: "name", label: t("nodemgt.col_name") },
-                { key: "node", label: t("nodemgt.col_node"), render: (row) => nodeName(row.node_uuid) },
-                { key: "protocol", label: t("nodemgt.col_protocol"), render: (row) => t(`nodemgt.outbound_${row.protocol}`, { defaultValue: row.protocol }) },
-                { key: "address", label: t("nodemgt.col_address"), render: (row) => row.address ? `${row.address}${row.dest_port ? `:${row.dest_port}` : ""}` : "—" },
+                { key: "name", label: t("nodemgt.col_name"), width: "18%", render: (row) => <CellEllipsis value={str(row.name)} /> },
+                { key: "node", label: t("nodemgt.col_node"), width: "16%", render: (row) => <CellEllipsis value={nodeName(row.node_uuid)} /> },
+                { key: "protocol", label: t("nodemgt.col_protocol"), width: "12%", render: (row) => t(`nodemgt.outbound_${row.protocol}`, { defaultValue: row.protocol }) },
+                { key: "address", label: t("nodemgt.col_address"), width: "20%", render: (row) => <CellEllipsis value={row.address ? `${row.address}${row.dest_port ? `:${row.dest_port}` : ""}` : "—"} /> },
                 { key: "delivery", label: t("nodemgt.col_delivery"), render: (row) => <DeliveryChip status={nodeDelivery(row.node_uuid)?.status} error={nodeDelivery(row.node_uuid)?.last_error} /> },
                 { key: "enabled", label: t("nodemgt.col_enabled"), render: (row) => <EnableSwitch checked={row.enabled !== false} onChange={(next) => void toggleRowEnabled("outbound", row, next)} /> },
                 {
@@ -3246,21 +3272,49 @@ export default function PlusAdminPage() {
             />
           ) : tab === "routes" ? (
             <RecordTable
+              id="routes"
               empty={t("nodemgt.empty")}
               loading={loading}
               rows={listPager.pageItems}
               columns={[
-                { key: "name", label: t("nodemgt.col_name") },
-                { key: "node", label: t("nodemgt.col_node"), render: (row) => nodeName(row.node_uuid) },
-                { key: "inbound", label: t("nodemgt.col_inbound"), render: (row) => inboundOptions.find((item) => item.value === row.inbound_id)?.label || t("nodemgt.route_all_inbounds") },
-                { key: "outbound", label: t("nodemgt.col_outbound"), render: (row) => [...builtinOutboundOptions, ...outboundOptions].find((item) => item.value === row.outbound_id)?.label || row.outbound_id || "—" },
-                { key: "match", label: t("nodemgt.col_match"), render: (row) => [row.domain, row.ip, row.protocol, row.port, row.source, row.network].filter(Boolean).join(" · ") || "—" },
-                { key: "priority", label: t("nodemgt.col_priority") },
-                { key: "delivery", label: t("nodemgt.col_delivery"), render: (row) => <DeliveryChip status={nodeDelivery(row.node_uuid)?.status} error={nodeDelivery(row.node_uuid)?.last_error} /> },
-                { key: "enabled", label: t("nodemgt.col_enabled"), render: (row) => <EnableSwitch checked={row.enabled !== false} onChange={(next) => void toggleRowEnabled("route", row, next)} /> },
+                { key: "name", label: t("nodemgt.col_name"), width: "12%", render: (row) => <CellEllipsis value={str(row.name)} /> },
+                { key: "node", label: t("nodemgt.col_node"), width: "11%", render: (row) => <CellEllipsis value={nodeName(row.node_uuid)} /> },
+                {
+                  key: "inbound",
+                  label: t("nodemgt.col_inbound"),
+                  width: "18%",
+                  render: (row) => (
+                    <CellEllipsis
+                      value={inboundOptions.find((item) => item.value === row.inbound_id)?.label || t("nodemgt.route_all_inbounds")}
+                    />
+                  ),
+                },
+                {
+                  key: "outbound",
+                  label: t("nodemgt.col_outbound"),
+                  width: "13%",
+                  render: (row) => (
+                    <CellEllipsis
+                      value={[...builtinOutboundOptions, ...outboundOptions].find((item) => item.value === row.outbound_id)?.label || row.outbound_id || "—"}
+                    />
+                  ),
+                },
+                {
+                  key: "match",
+                  label: t("nodemgt.col_match"),
+                  width: "7%",
+                  render: (row) => (
+                    <CellEllipsis value={[row.domain, row.ip, row.protocol, row.port, row.source, row.network].filter(Boolean).join(" · ") || "—"} />
+                  ),
+                },
+                { key: "priority", label: t("nodemgt.col_priority"), width: "6%", fit: true },
+                { key: "delivery", label: t("nodemgt.col_delivery"), width: "11%", fit: true, render: (row) => <DeliveryChip status={nodeDelivery(row.node_uuid)?.status} error={nodeDelivery(row.node_uuid)?.last_error} /> },
+                { key: "enabled", label: t("nodemgt.col_enabled"), width: "8%", fit: true, render: (row) => <EnableSwitch checked={row.enabled !== false} onChange={(next) => void toggleRowEnabled("route", row, next)} /> },
                 {
                   key: "actions",
                   label: t("nodemgt.col_actions"),
+                  width: "14%",
+                  fit: true,
                   render: (row) => (
                     <RowActions>
                       <IconButton size="small" aria-label={t("nodemgt.edit")} onClick={() => openEdit("route", row)}>
@@ -3274,16 +3328,18 @@ export default function PlusAdminPage() {
             />
           ) : tab === "users" ? (
             <RecordTable
+              id="users"
               empty={t("nodemgt.empty")}
               loading={loading}
+              fixed
               rows={listPager.pageItems}
               columns={[
-                { key: "username", label: t("nodemgt.col_username"), width: "9%" },
-                { key: "inbounds", label: t("nodemgt.col_inbounds"), width: "11%", render: (row) => <InboundOverflow names={row.inbound_names || []} /> },
+                { key: "username", label: t("nodemgt.col_username"), width: "11%" },
+                { key: "inbounds", label: t("nodemgt.col_inbounds"), width: "12%", render: (row) => <InboundOverflow names={row.inbound_names || []} /> },
                 { key: "plan", label: t("nodemgt.col_plan"), width: "6%", render: (row) => row.plan_name || "—" },
                 {
                   key: "presence",
-                  width: "5%",
+                  width: "6%",
                   label: t("nodemgt.col_presence"),
                   render: (row) => (
                     <Box
@@ -3313,11 +3369,11 @@ export default function PlusAdminPage() {
                     );
                   },
                 },
-                { key: "status", label: t("nodemgt.col_status"), width: "5%", render: (row) => <StatusChip value={row.status} /> },
+                { key: "status", label: t("nodemgt.col_status"), width: "6%", render: (row) => <StatusChip value={row.status} /> },
                 { key: "delivery", label: t("nodemgt.col_delivery"), width: "6%", render: (row) => <DeliveryChip status={nodeDelivery(row.node_uuid)?.status} error={nodeDelivery(row.node_uuid)?.last_error} /> },
                 { key: "quota", label: t("nodemgt.col_quota_bytes"), width: "8%", render: (row) => formatQuotaLabel(row.used_bytes || 0, row.quota_bytes || 0, "—") },
-                { key: "rate", label: t("nodemgt.col_rate_limit_bps"), width: "5%", render: (row) => formatMbpsLabel(row.rate_limit_bps || 0, t("nodemgt.unlimited")) },
-                { key: "ends", label: t("nodemgt.col_expires"), width: "9%", render: (row) => formatWhen(row.expires_at || row.assignment_ends_at) },
+                { key: "rate", label: t("nodemgt.col_rate_limit_bps"), width: "6%", render: (row) => formatMbpsLabel(row.rate_limit_bps || 0, t("nodemgt.unlimited")) },
+                { key: "ends", label: t("nodemgt.col_expires"), width: "10%", render: (row) => formatWhen(row.expires_at || row.assignment_ends_at) },
                 {
                   key: "reset",
                   width: "6%",
@@ -3326,7 +3382,7 @@ export default function PlusAdminPage() {
                 },
                 {
                   key: "actions",
-                  width: "22%",
+                  width: "15%",
                   label: t("nodemgt.col_actions"),
                   render: (row) => (
                     <RowActions>
@@ -3346,22 +3402,26 @@ export default function PlusAdminPage() {
             />
           ) : tab === "plans" ? (
             <RecordTable
+              id="plans"
               empty={t("nodemgt.empty")}
               loading={loading}
               rows={listPager.pageItems}
               columns={[
-                { key: "name", label: t("nodemgt.col_name") },
-                { key: "traffic", label: t("nodemgt.col_traffic_bytes"), render: (row) => formatGiBLabel(row.traffic_bytes || 0) },
-                { key: "days", label: t("nodemgt.col_duration_days"), render: (row) => `${row.duration_days || 0}` },
-                { key: "rate", label: t("nodemgt.col_rate_limit_bps"), render: (row) => formatMbpsLabel(row.rate_limit_bps || 0, t("nodemgt.unlimited")) },
+                { key: "name", label: t("nodemgt.col_name"), width: "24%", render: (row) => <CellEllipsis value={str(row.name)} /> },
+                { key: "traffic", label: t("nodemgt.col_traffic_bytes"), width: "16%", render: (row) => formatGiBLabel(row.traffic_bytes || 0) },
+                { key: "days", label: t("nodemgt.col_duration_days"), width: "14%", render: (row) => `${row.duration_days || 0}` },
+                { key: "rate", label: t("nodemgt.col_rate_limit_bps"), width: "16%", render: (row) => formatMbpsLabel(row.rate_limit_bps || 0, t("nodemgt.unlimited")) },
                 {
                   key: "online_users",
                   label: t("nodemgt.col_online_users"),
+                  width: "16%",
                   render: (row) => String(users.filter((item) => item.plan_id === row.id && item.online).length),
                 },
                 {
                   key: "actions",
                   label: t("nodemgt.col_actions"),
+                  width: "14%",
+                  fit: true,
                   render: (row) => (
                     <RowActions>
                       <IconButton size="small" aria-label={t("nodemgt.edit")} onClick={() => openEdit("plan", row)}>
@@ -3375,13 +3435,14 @@ export default function PlusAdminPage() {
             />
           ) : tab === "certs" ? (
             <RecordTable
+              id="certs"
               empty={t("nodemgt.empty")}
               loading={loading}
               rows={listPager.pageItems}
               columns={[
-                { key: "domain", label: t("nodemgt.col_domain"), render: (row) => certOptionLabel(row) },
-                { key: "node", label: t("nodemgt.col_node"), render: (row) => nodeName(row.node_uuid) },
-                { key: "status", label: t("nodemgt.col_status"), render: (row) => <StatusChip value={isFileCert(row) && row.status === "pending" ? "file_pending" : row.status} /> },
+                { key: "domain", label: t("nodemgt.col_domain"), width: "12%", render: (row) => <CellEllipsis value={certOptionLabel(row)} /> },
+                { key: "node", label: t("nodemgt.col_node"), width: "10%", render: (row) => <CellEllipsis value={nodeName(row.node_uuid)} /> },
+                { key: "status", label: t("nodemgt.col_status"), width: "8%", render: (row) => <StatusChip value={isFileCert(row) && row.status === "pending" ? "file_pending" : row.status} /> },
                 {
                   key: "delivery",
                   label: t("nodemgt.col_delivery"),
@@ -3395,15 +3456,17 @@ export default function PlusAdminPage() {
                     );
                   },
                 },
-                { key: "fingerprint", label: t("nodemgt.col_fingerprint"), render: (row) => <CellClamp value={row.fingerprint || "—"} maxWidth={160} /> },
+                { key: "fingerprint", label: t("nodemgt.col_fingerprint"), width: "9%", render: (row) => <CellClamp value={row.fingerprint || "—"} maxWidth={160} /> },
                 {
                   key: "issuer",
                   label: t("nodemgt.col_issuer"),
-                  render: (row) => displayCertIssuer(row, t("nodemgt.cert_source_file"), t("nodemgt.cert_source_acme"), t("nodemgt.cert_source_root")),
+                  width: "11%",
+                  render: (row) => <CellEllipsis value={displayCertIssuer(row, t("nodemgt.cert_source_file"), t("nodemgt.cert_source_acme"), t("nodemgt.cert_source_root"))} />,
                 },
                 {
                   key: "auto_renew",
                   label: t("nodemgt.col_auto_renew"),
+                  width: "8%",
                   render: (row) =>
                     isACMECert(row) ? (
                       <EnableSwitch checked={certAutoRenewOn(row)} onChange={(next) => void setCertAutoRenew(row, next)} />
@@ -3411,11 +3474,12 @@ export default function PlusAdminPage() {
                       "—"
                     ),
                 },
-                { key: "expires", label: t("nodemgt.col_expires"), render: (row) => formatWhen(row.not_after) },
-                { key: "error", label: t("nodemgt.col_last_error"), render: (row) => <CellClamp value={nodemgtErrorMessage(row.last_error, t) || "—"} maxWidth={280} /> },
+                { key: "expires", label: t("nodemgt.col_expires"), width: "10%", render: (row) => formatWhen(row.not_after) },
+                { key: "error", label: t("nodemgt.col_last_error"), width: "8%", render: (row) => <CellClamp value={nodemgtErrorMessage(row.last_error, t) || "—"} maxWidth={280} /> },
                 {
                   key: "actions",
                   label: t("nodemgt.col_actions"),
+                  width: "14%",
                   render: (row) => (
                     <RowActions>
                       <IconButton size="small" aria-label={t("nodemgt.edit")} onClick={() => openEdit("cert", row)}>
@@ -3436,17 +3500,19 @@ export default function PlusAdminPage() {
             />
           ) : tab === "subscriptions" ? (
             <RecordTable
+              id="subscriptions"
               empty={t("nodemgt.empty")}
               loading={loading}
               rows={listPager.pageItems}
               columns={[
-                { key: "user", label: t("nodemgt.col_user_id"), render: (row) => row.username || userOptions.find((item) => item.value === row.user_id)?.label || row.user_id },
-                { key: "format", label: t("nodemgt.col_format"), render: (row) => row.auto_detect ? t("nodemgt.tpl_auto") : displayCore(row.format) },
-                { key: "url", label: t("nodemgt.col_sub_url"), render: (row) => subURL(row) || "—" },
-                { key: "enabled", label: t("nodemgt.col_enabled"), render: (row) => <EnableSwitch checked={row.enabled !== false} onChange={(next) => void toggleRowEnabled("subscription", row, next)} /> },
+                { key: "user", label: t("nodemgt.col_user_id"), width: "16%", render: (row) => row.username || userOptions.find((item) => item.value === row.user_id)?.label || row.user_id },
+                { key: "format", label: t("nodemgt.col_format"), width: "10%", render: (row) => row.auto_detect ? t("nodemgt.tpl_auto") : displayCore(row.format) },
+                { key: "url", label: t("nodemgt.col_sub_url"), render: (row) => <CellEllipsis value={subURL(row) || "—"} /> },
+                { key: "enabled", label: t("nodemgt.col_enabled"), width: "8%", render: (row) => <EnableSwitch checked={row.enabled !== false} onChange={(next) => void toggleRowEnabled("subscription", row, next)} /> },
                 {
                   key: "actions",
                   label: t("nodemgt.col_actions"),
+                  width: "18%",
                   render: (row) => (
                     <RowActions>
                       <IconButton size="small" aria-label={t("nodemgt.copy_link")} onClick={() => void copySubURL(row)}>
@@ -3463,6 +3529,7 @@ export default function PlusAdminPage() {
             />
           ) : tab === "audit" ? (
             <RecordTable
+              id="audit"
               empty={t("nodemgt.empty")}
               loading={loading}
               rows={listPager.pageItems}
@@ -3499,6 +3566,7 @@ export default function PlusAdminPage() {
                 },
                 {
                   key: "last_error",
+                  width: "28%",
                   label: t("nodemgt.col_last_error"),
                   render: (row) =>
                     row.last_error ? (
@@ -3511,6 +3579,7 @@ export default function PlusAdminPage() {
                 },
                 {
                   key: "updated_at",
+                  width: "18%",
                   label: t("nodemgt.col_created_at"),
                   render: (row) => formatWhen(row.updated_at || row.created_at),
                 },
@@ -4520,17 +4589,121 @@ function recordMobileSkipKeys(row: any) {
   return skip;
 }
 
+type RecordColumn = {
+  key: string;
+  label: string;
+  width?: string;
+  fit?: boolean;
+  render?: (row: any) => ReactNode;
+};
+
+const FIT_COLUMN_KEYS = new Set([
+  "actions",
+  "auto_renew",
+  "delivery",
+  "enabled",
+  "presence",
+  "priority",
+  "status",
+]);
+
+const FIT_COLUMN_WIDTHS: Record<string, string> = {
+  actions: "16%",
+  auto_renew: "8%",
+  delivery: "10%",
+  enabled: "8%",
+  presence: "6%",
+  priority: "6%",
+  status: "8%",
+};
+
+function columnFits(column: RecordColumn) {
+  if (column.fit === true) return true;
+  if (column.fit === false) return false;
+  return FIT_COLUMN_KEYS.has(column.key);
+}
+
+function columnWidth(column: RecordColumn) {
+  if (column.width) return column.width;
+  if (columnFits(column)) return FIT_COLUMN_WIDTHS[column.key] || "8%";
+  return undefined;
+}
+
+function columnClassName(column: RecordColumn) {
+  return columnFits(column) ? "admin-nodemgt-col-fit" : "admin-nodemgt-col-fluid";
+}
+
+function columnMinWidth(column: RecordColumn) {
+  switch (column.key) {
+    case "actions":
+      return 120;
+    case "delivery":
+      return 80;
+    case "enabled":
+    case "auto_renew":
+      return 64;
+    case "priority":
+      return 48;
+    case "presence":
+    case "status":
+      return 56;
+    default:
+      return 72;
+  }
+}
+
+function columnPreferredWidths(columns: RecordColumn[]): TableColumnWidths {
+  const shares = columns.map((column) => {
+    const width = columnWidth(column);
+    if (width?.endsWith("%")) return Math.max(0, Number.parseFloat(width));
+    return 0;
+  });
+  const assigned = shares.reduce((sum, share) => sum + share, 0);
+  const missing = shares.filter((share) => share <= 0).length;
+  const fill = missing ? Math.max(0, 100 - assigned) / missing : 0;
+  const out: TableColumnWidths = {};
+  columns.forEach((column, index) => {
+    const pct = shares[index] > 0 ? shares[index] : fill || 100 / columns.length;
+    out[column.key] = Math.max(columnMinWidth(column), Math.round(pct * 10));
+  });
+  return out;
+}
+
+function columnMinWidths(columns: RecordColumn[]): TableColumnWidths {
+  const out: TableColumnWidths = {};
+  for (const column of columns) {
+    out[column.key] = columnMinWidth(column);
+  }
+  return out;
+}
+
 function RecordTable({
+  id,
   rows,
   columns,
   empty,
   loading,
 }: {
+  id?: string;
   rows: any[];
   empty?: string;
   loading?: boolean;
-  columns: { key: string; label: string; width?: string; render?: (row: any) => ReactNode }[];
+  fixed?: boolean;
+  columns: RecordColumn[];
 }) {
+  const { t } = useTranslation();
+  const keys = columns.map((column) => column.key);
+  const mins = columnMinWidths(columns);
+  const preferred = columnPreferredWidths(columns);
+  const resize = useResizableTableColumns({
+    storageKey: id ? `lite.admin.nodemgt.${id}.columnWidths` : "",
+    keys,
+    mins,
+    preferred,
+    enabled: Boolean(id) && rows.length > 0,
+  });
+  const lastKey = keys[keys.length - 1];
+  const actionCol = columns.find((column) => column.key === "actions");
   if (!rows.length) {
     if (loading) {
       return (
@@ -4544,23 +4717,58 @@ function RecordTable({
     if (!empty) return null;
     return <Box className="km-admin-list-empty">{empty}</Box>;
   }
-  const actionCol = columns.find((column) => column.key === "actions");
   return (
     <>
-      <Box className="admin-responsive-table-wrap overflow-x-hidden" sx={{ display: { xs: "none", md: "block" } }}>
-        <Table container={false} className="admin-responsive-table admin-nodemgt-record-table w-full">
-          {columns.some((column) => column.width) ? (
-            <colgroup>
-              {columns.map((column) => (
-                <col key={column.key} style={column.width ? { width: column.width } : undefined} />
-              ))}
-            </colgroup>
-          ) : null}
+      <Box
+        ref={id ? resize.wrapRef : undefined}
+        className="admin-responsive-table-wrap overflow-x-hidden"
+        sx={{ display: { xs: "none", md: "block" } }}
+      >
+        <Table
+          container={false}
+          className={`admin-responsive-table admin-nodemgt-record-table w-full is-fixed${id && resize.activeWidths ? " is-column-sized" : ""}`}
+        >
+          <colgroup>
+            {columns.map((column) => {
+              const sized = id ? resize.activeWidths?.[column.key] : undefined;
+              const width = sized ?? columnWidth(column);
+              return <col key={column.key} style={sized ? { width: sized } : width ? { width } : undefined} />;
+            })}
+          </colgroup>
           <TableHeader>
             <TableRow>
-              {columns.map((column) => (
-                <TableHead key={column.key}>{column.label}</TableHead>
-              ))}
+              {columns.map((column) => {
+                const sized = id ? resize.activeWidths?.[column.key] : undefined;
+                const isLast = column.key === lastKey;
+                return (
+                  <TableHead
+                    key={column.key}
+                    className={columnClassName(column)}
+                    style={tableColumnStyle(sized)}
+                  >
+                    {isLast && id ? (
+                      <span className="admin-node-action-head">
+                        <span>{column.label}</span>
+                        <button type="button" className="admin-node-col-reset" onClick={resize.reset}>
+                          <RefreshCw size={14} />
+                          {t("admin.nodeTable.resetColumnWidths")}
+                        </button>
+                      </span>
+                    ) : (
+                      column.label
+                    )}
+                    {id && !isLast ? (
+                      <span
+                        className="admin-node-col-resize"
+                        role="separator"
+                        aria-orientation="vertical"
+                        aria-label={t("admin.nodeTable.resizeColumn")}
+                        onPointerDown={(event) => resize.startResize(column.key, event)}
+                      />
+                    ) : null}
+                  </TableHead>
+                );
+              })}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -4568,11 +4776,14 @@ function RecordTable({
               <TableRow key={row.id || index}>
                 {columns.map((column) => {
                   const content = column.render ? column.render(row) : str(row[column.key], "—");
+                  const sized = id ? resize.activeWidths?.[column.key] : undefined;
                   return (
                     <TableCell
                       key={column.key}
+                      className={columnClassName(column)}
                       data-label={column.label}
                       title={typeof content === "string" ? content : undefined}
+                      style={tableColumnStyle(sized)}
                     >
                       {content}
                     </TableCell>
